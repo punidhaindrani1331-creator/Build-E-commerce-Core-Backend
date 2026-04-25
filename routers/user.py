@@ -4,6 +4,7 @@ import os
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 import models, schemas, auth
+from services import user_services
 from database import get_db
 
 router = APIRouter(
@@ -17,11 +18,7 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     Register a new user with a hashed password.
     """
     # Check if user already exists
-    db_user = db.query(models.User).filter(
-        (models.User.email == user.email) | (models.User.username == user.username)
-    ).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="User already registered")
+    user_services.validate_user_not_exists(db, user.email, user.username)
 
     # Create new user
     hashed_password = auth.get_password_hash(user.password)

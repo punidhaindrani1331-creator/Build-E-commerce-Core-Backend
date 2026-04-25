@@ -4,6 +4,7 @@ from typing import List
 import os
 
 import models, schemas, auth
+from services import admin_services, user_services, product_services
 from database import get_db
 from routers.cart import get_current_admin
 from redis_client import redis_client
@@ -22,15 +23,10 @@ def register_admin(user: schemas.AdminCreate, db: Session = Depends(get_db)):
     """
     # Verify Admin Secret Key
     expected_secret = os.getenv("ADMIN_SECRET_KEY", "admin_secret_123")
-    if user.admin_secret != expected_secret:
-        raise HTTPException(status_code=403, detail="Invalid Admin Secret Key")
+    admin_services.validate_admin_secret(user.admin_secret, expected_secret)
 
     # Check if user already exists
-    db_user = db.query(models.User).filter(
-        (models.User.email == user.email.strip().lower()) | (models.User.username == user.username.strip())
-    ).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="User already registered")
+    user_services.validate_user_not_exists(db, user.email.strip().lower(), user.username.strip())
 
     # Create new admin
     hashed_password = auth.get_password_hash(user.password)
@@ -79,9 +75,7 @@ def admin_update_stock(
     """
     Update stock levels for a specific product. Restricted to Admin only.
     """
-    db_product = db.query(models.Product).filter(models.Product.id == product_id).first()
-    if not db_product:
-        raise HTTPException(status_code=404, detail="Product not found")
+    db_product = product_services.validate_product_exists(db, product_id)
     
     db_product.stock = stock_update
     db.commit()
@@ -107,9 +101,7 @@ def admin_update_product(
     """
     Update a product. Restricted to Admin only.
     """
-    db_product = db.query(models.Product).filter(models.Product.id == product_id).first()
-    if not db_product:
-        raise HTTPException(status_code=404, detail="Product not found")
+    db_product = product_services.validate_product_exists(db, product_id)
     
     update_data = product_update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -137,9 +129,7 @@ def admin_delete_product(
     """
     Delete a product. Restricted to Admin only.
     """
-    db_product = db.query(models.Product).filter(models.Product.id == product_id).first()
-    if not db_product:
-        raise HTTPException(status_code=404, detail="Product not found")
+    db_product = product_services.validate_product_exists(db, product_id)
         
     db.delete(db_product)
     db.commit()

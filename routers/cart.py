@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 import models, schemas, auth
+from services import cart_services, product_services
 from database import get_db
 
 router = APIRouter(
@@ -56,13 +57,10 @@ def add_to_cart(
     - 404 if product not found.
     """
     # 400 ERROR: Invalid quantity
-    if item.quantity <= 0:
-        raise HTTPException(status_code=400, detail="Quantity must be greater than zero")
+    cart_services.validate_positive_quantity(item.quantity)
 
     # 404 ERROR: Product not found
-    product = db.query(models.Product).filter(models.Product.id == item.product_id).first()
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+    product = product_services.validate_product_exists(db, item.product_id)
 
     # Check if item already in cart for THIS specific user
     db_cart_item = db.query(models.CartItem).filter(
@@ -109,14 +107,7 @@ def remove_from_cart(
     """
     Remove an item from the cart. Ownership check enforced.
     """
-    db_cart_item = db.query(models.CartItem).filter(
-        models.CartItem.id == cart_item_id,
-        models.CartItem.user_id == user_id
-    ).first()
-
-    if not db_cart_item:
-        # Will fail if item doesn't exist OR belongs to another user
-        raise HTTPException(status_code=404, detail="Cart item not found")
+    db_cart_item = cart_services.validate_cart_item_exists(db, cart_item_id, user_id)
 
     db.delete(db_cart_item)
     db.commit()

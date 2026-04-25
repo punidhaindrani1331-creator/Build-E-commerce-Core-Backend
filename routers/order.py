@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 import models, schemas
+from services import order_services
 from database import get_db
 from routers.cart import get_current_user_id
 
@@ -41,8 +42,7 @@ def place_order(
     """
     # 1. Read user cart
     cart_items = db.query(models.CartItem).filter(models.CartItem.user_id == user_id).all()
-    if not cart_items:
-        raise HTTPException(status_code=400, detail="Cart is empty")
+    order_services.validate_cart_not_empty(cart_items)
 
     # 2. Validate stock available and calculate total
     total_amount = 0
@@ -51,11 +51,7 @@ def place_order(
     for item in cart_items:
         # 409 ERROR: Out of stock
         product = item.product
-        if product.stock < item.quantity:
-            raise HTTPException(
-                status_code=409, 
-                detail=f"Not enough stock for product '{product.name}'. Available: {product.stock}"
-            )
+        order_services.validate_stock_sufficient(product, item.quantity)
         
         # Calculate amount
         item_total = product.price * item.quantity
@@ -121,3 +117,37 @@ def get_my_orders(
     """
     orders = db.query(models.Order).filter(models.Order.user_id == user_id).all()
     return orders
+
+@router.put("/cancel/{order_id}", response_model=schemas.OrderResponse)
+def cancel_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Cancel an order:
+    1. Validate order exists
+    2. Validate ownership
+    3. Validate status is 'placed'
+    4. Restore stock
+    5. Update status to 'cancelled'
+    """
+    order = db.query(models.Order).filter(models.Order.id == order_id).first()
+    
+    # Validation using services
+    order_services.validate_order_exists(order)
+    order_services.validate_order_ownership(order, user_id)
+    order_services.validate_order_cancellable(order)
+
+    # Restore stock for each item in the order
+    for item in order.items:
+        product = item.product
+        product.stock += item.quantity
+    
+    # Update order status
+    order.status = "cancelled"
+    
+    db.commit()
+    db.refresh(order)
+    
+    return order

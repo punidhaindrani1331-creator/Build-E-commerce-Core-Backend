@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 import models, schemas
+from services import product_services
 from database import get_db
 import json
 from redis_client import redis_client
@@ -116,9 +117,7 @@ def read_product(
     except redis.exceptions.RedisError as e:
         print(f"Redis cache read failed: {e}")
         
-    db_product = db.query(models.Product).filter(models.Product.id == product_id).first()
-    if db_product is None:
-        raise HTTPException(status_code=404, detail="Product not found")
+    db_product = product_services.validate_product_exists(db, product_id)
         
     try:
         redis_client.set(f"product:{product_id}", json.dumps(jsonable_encoder(db_product)), ex=3600)
