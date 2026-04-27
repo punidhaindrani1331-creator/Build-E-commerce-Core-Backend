@@ -10,3 +10,4 @@ pymysql
 cryptography
 pydantic[email]
 python-dotenv
+redis

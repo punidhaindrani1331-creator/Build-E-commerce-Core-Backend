@@ -12,7 +12,7 @@ router = APIRouter(
     tags=["Authentication"]
 )
 
-@router.post("/register", response_model=schemas.User, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=schemas.StandardResponse[schemas.User], status_code=status.HTTP_201_CREATED)
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     """
     Register a new user with a hashed password.
@@ -30,10 +30,13 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    return new_user
+    return {
+        "success": True,
+        "message": "User registered successfully",
+        "data": new_user
+    }
 
-@router.post("/login")
-
+@router.post("/login", response_model=schemas.StandardResponse[dict])
 def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """
     Authenticate a user and return a JWT access token.
@@ -53,4 +56,8 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
         )
 
     access_token = auth.create_access_token(data={"user_id": db_user.id})
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "success": True,
+        "message": "Login successful",
+        "data": {"access_token": access_token, "token_type": "bearer"}
+    }

@@ -1,0 +1,55 @@
+"""
+Redis Connection Test
+Run this script to verify Redis is connected and working.
+
+Usage:
+    python test_redis.py
+
+Make sure Redis server is running:
+    - Linux/Mac: redis-server
+    - Docker: docker run -p 6379:6379 redis
+"""
+
+from redis_config import redis_client, ping_redis
+
+def test_redis():
+    print("=" * 40)
+    print("   Redis Connection Test")
+    print("=" * 40)
+
+    # 1. Ping test
+    print("\n[1] Pinging Redis...")
+    if ping_redis():
+        print("    ✅ Connected to Redis successfully!")
+    else:
+        print("    ❌ Could not connect to Redis. Is the server running?")
+        return
+
+    # 2. SET a key
+    print("\n[2] Setting key: redis.set('name', 'john')")
+    redis_client.set("name", "john")
+    print("    ✅ Key set.")
+
+    # 3. GET the key
+    print("\n[3] Getting key: redis.get('name')")
+    value = redis_client.get("name")
+    print(f"    ✅ Got value: '{value}'")
+
+    # 4. SET with expiry (TTL)
+    print("\n[4] Setting key with 10s TTL: redis.set('session', 'abc123', ex=10)")
+    redis_client.set("session", "abc123", ex=10)
+    ttl = redis_client.ttl("session")
+    print(f"    ✅ Key set. TTL remaining: {ttl}s")
+
+    # 5. DELETE a key
+    print("\n[5] Deleting key: redis.delete('name')")
+    redis_client.delete("name")
+    result = redis_client.get("name")
+    print(f"    ✅ Deleted. Getting 'name' now returns: {result}")
+
+    print("\n" + "=" * 40)
+    print("   All tests passed! Redis is ready.")
+    print("=" * 40)
+
+if __name__ == "__main__":
+    test_redis()

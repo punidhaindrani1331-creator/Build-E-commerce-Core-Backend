@@ -6,7 +6,8 @@ from typing import List
 import models, schemas
 from services import order_services
 from database import get_db
-from routers.cart import get_current_user_id
+from auth import get_current_user_id
+from sqlalchemy.orm import joinedload
 
 router = APIRouter(
     prefix="/orders",
@@ -24,8 +25,7 @@ def send_confirmation_email(username: str, order_id: int, total_amount: float):
     print("-----------------\n")
 
 # User Order Operations
-@router.post("/place", response_model=schemas.OrderResponse, status_code=status.HTTP_201_CREATED)
-
+@router.post("/place", response_model=schemas.StandardResponse[schemas.OrderResponse], status_code=status.HTTP_201_CREATED)
 def place_order(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -41,6 +41,7 @@ def place_order(
     6. Clear user cart
     """
     # 1. Read user cart
+    start_time_order = time.time()
     cart_items = db.query(models.CartItem).filter(models.CartItem.user_id == user_id).all()
     order_services.validate_cart_not_empty(cart_items)
 
@@ -93,6 +94,8 @@ def place_order(
     # Final commit for the entire transaction
     db.commit()
     db.refresh(new_order)
+    end_time_order = time.time()
+    print(f"DEBUG: Complex order placement transaction took {end_time_order - start_time_order:.4f} sec")
     
     # 7. Send confirmation email via background task
     user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -105,9 +108,13 @@ def place_order(
         total_amount=new_order.total_amount
     )
     
-    return new_order
+    return {
+        "success": True,
+        "message": "Order placed successfully",
+        "data": new_order
+    }
 
-@router.get("/", response_model=List[schemas.OrderResponse])
+@router.get("/", response_model=schemas.StandardResponse[List[schemas.OrderResponse]])
 def get_my_orders(
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
@@ -115,10 +122,18 @@ def get_my_orders(
     """
     Retrieve a list of orders placed by the current user.
     """
-    orders = db.query(models.Order).filter(models.Order.user_id == user_id).all()
-    return orders
+    orders = db.query(models.Order).options(
+        joinedload(models.Order.user),
+        joinedload(models.Order.items).joinedload(models.OrderItem.product)
+    ).filter(models.Order.user_id == user_id).all()
+    return {
+        "success": True,
+        "message": "Orders fetched successfully",
+        "data": orders,
+        "meta": {"total": len(orders)}
+    }
 
-@router.put("/cancel/{order_id}", response_model=schemas.OrderResponse)
+@router.put("/cancel/{order_id}", response_model=schemas.StandardResponse[schemas.OrderResponse])
 def cancel_order(
     order_id: int,
     db: Session = Depends(get_db),
@@ -150,4 +165,8 @@ def cancel_order(
     db.commit()
     db.refresh(order)
     
-    return order
+    return {
+        "success": True,
+        "message": "Order cancelled successfully",
+        "data": order
+    }

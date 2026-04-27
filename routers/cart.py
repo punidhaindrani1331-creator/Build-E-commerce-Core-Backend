@@ -1,51 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from typing import List
+from sqlalchemy.orm import joinedload
 
 import models, schemas, auth
 from services import cart_services, product_services
 from database import get_db
+from auth import get_current_user_id, get_current_admin
 
 router = APIRouter(
     prefix="/cart",
     tags=["Cart"]
 )
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
-
-# Real Authentication Dependency
-def get_current_user_id(token: str = Depends(oauth2_scheme)):
-    """
-    Decodes the JWT token to extract the user_id.
-    """
-    payload = auth.decode_access_token(token)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return payload.get("user_id")
-
-# Admin Security Dependency
-def get_current_admin(
-    db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
-):
-    """
-    Checks if the authenticated user has admin privileges.
-    Returns 403 if not an admin.
-    """
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user or user.is_admin != 1:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have administrative privileges"
-        )
-    return user
-
-@router.post("/", response_model=schemas.CartItem)
+@router.post("/", response_model=schemas.StandardResponse[schemas.CartItem])
 def add_to_cart(
     item: schemas.CartItemCreate, 
     db: Session = Depends(get_db),
@@ -82,9 +50,13 @@ def add_to_cart(
 
     db.commit()
     db.refresh(db_cart_item)
-    return db_cart_item
+    return {
+        "success": True,
+        "message": "Item added to cart",
+        "data": db_cart_item
+    }
 
-@router.get("/", response_model=schemas.Cart)
+@router.get("/", response_model=schemas.StandardResponse[schemas.Cart])
 def view_cart(
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
@@ -92,13 +64,18 @@ def view_cart(
     """
     Get all items in the current user's cart. Only shows OWN cart.
     """
-    items = db.query(models.CartItem).filter(models.CartItem.user_id == user_id).all()
+    items = db.query(models.CartItem).options(joinedload(models.CartItem.product)).filter(models.CartItem.user_id == user_id).all()
     
     total_price = sum(item.product.price * item.quantity for item in items)
     
-    return {"items": items, "total_price": total_price}
+    return {
+        "success": True,
+        "message": "Cart retrieved successfully",
+        "data": {"items": items, "total_price": total_price},
+        "meta": {"total": len(items)}
+    }
 
-@router.delete("/{cart_item_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{cart_item_id}", response_model=schemas.StandardResponse[None])
 def remove_from_cart(
     cart_item_id: int, 
     db: Session = Depends(get_db),
@@ -111,4 +88,7 @@ def remove_from_cart(
 
     db.delete(db_cart_item)
     db.commit()
-    return None
+    return {
+        "success": True,
+        "message": "Item removed from cart"
+    }

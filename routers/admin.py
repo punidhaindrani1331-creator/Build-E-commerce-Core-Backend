@@ -6,9 +6,10 @@ import os
 import models, schemas, auth
 from services import admin_services, user_services, product_services
 from database import get_db
-from routers.cart import get_current_admin
+from auth import get_current_admin
 from redis_client import redis_client
 import redis
+from sqlalchemy.orm import joinedload
 
 router = APIRouter(
     prefix="/admin",
@@ -16,7 +17,7 @@ router = APIRouter(
 )
 
 # Admin: Register (Protected by Secret Key, not JWT Admin status)
-@router.post("/register", response_model=schemas.User, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=schemas.StandardResponse[schemas.User], status_code=status.HTTP_201_CREATED)
 def register_admin(user: schemas.AdminCreate, db: Session = Depends(get_db)):
     """
     Register a new ADMIN user. Requires a secret key from environment variables.
@@ -39,10 +40,14 @@ def register_admin(user: schemas.AdminCreate, db: Session = Depends(get_db)):
     db.add(new_admin)
     db.commit()
     db.refresh(new_admin)
-    return new_admin
+    return {
+        "success": True,
+        "message": "Admin registered successfully",
+        "data": new_admin
+    }
 
 # Admin: Add Product (Requires Admin JWT)
-@router.post("/products", response_model=schemas.Product, status_code=status.HTTP_201_CREATED)
+@router.post("/products", response_model=schemas.StandardResponse[schemas.Product], status_code=status.HTTP_201_CREATED)
 def admin_add_product(
     product: schemas.ProductCreate, 
     db: Session = Depends(get_db),
@@ -62,10 +67,14 @@ def admin_add_product(
     except redis.exceptions.RedisError as e:
         print(f"Redis cache delete failed: {e}")
     
-    return db_product
+    return {
+        "success": True,
+        "message": "Product added successfully",
+        "data": db_product
+    }
 
 # Admin: Update Stock (Requires Admin JWT)
-@router.patch("/products/{product_id}/stock", response_model=schemas.Product)
+@router.patch("/products/{product_id}/stock", response_model=schemas.StandardResponse[schemas.Product])
 def admin_update_stock(
     product_id: int, 
     stock_update: int, 
@@ -88,10 +97,14 @@ def admin_update_stock(
     except redis.exceptions.RedisError as e:
         print(f"Redis cache delete failed: {e}")
     
-    return db_product
+    return {
+        "success": True,
+        "message": "Stock updated successfully",
+        "data": db_product
+    }
 
 # Admin: Update Product (Requires Admin JWT)
-@router.put("/products/{product_id}", response_model=schemas.Product)
+@router.put("/products/{product_id}", response_model=schemas.StandardResponse[schemas.Product])
 def admin_update_product(
     product_id: int, 
     product_update: schemas.ProductUpdate, 
@@ -117,10 +130,14 @@ def admin_update_product(
     except redis.exceptions.RedisError as e:
         print(f"Redis cache delete failed: {e}")
     
-    return db_product
+    return {
+        "success": True,
+        "message": "Product updated successfully",
+        "data": db_product
+    }
 
 # Admin: Delete Product (Requires Admin JWT)
-@router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/products/{product_id}", response_model=schemas.StandardResponse[None])
 def admin_delete_product(
     product_id: int, 
     db: Session = Depends(get_db),
@@ -141,10 +158,13 @@ def admin_delete_product(
     except redis.exceptions.RedisError as e:
         print(f"Redis cache delete failed: {e}")
     
-    return None
+    return {
+        "success": True,
+        "message": "Product deleted successfully"
+    }
 
 # Admin: View All Orders (Requires Admin JWT)
-@router.get("/orders", response_model=List[schemas.OrderResponse])
+@router.get("/orders", response_model=schemas.StandardResponse[List[schemas.OrderResponse]])
 def admin_view_all_orders(
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin)
@@ -152,5 +172,13 @@ def admin_view_all_orders(
     """
     Retrieve all orders placed in the store. Restricted to Admin only.
     """
-    orders = db.query(models.Order).all()
-    return orders
+    orders = db.query(models.Order).options(
+        joinedload(models.Order.user),
+        joinedload(models.Order.items).joinedload(models.OrderItem.product)
+    ).all()
+    return {
+        "success": True,
+        "message": "All orders fetched successfully",
+        "data": orders,
+        "meta": {"total": len(orders)}
+    }

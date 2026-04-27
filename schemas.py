@@ -1,6 +1,20 @@
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr
-from typing import Optional, List
+from typing import Optional, List, Any, Generic, TypeVar
+
+T = TypeVar("T")
+
+# Standard Response Schemas
+class Meta(BaseModel):
+    page: Optional[int] = None
+    limit: Optional[int] = None
+    total: Optional[int] = None
+
+class StandardResponse(BaseModel, Generic[T]):
+    success: bool
+    message: str
+    data: Optional[T] = None
+    meta: Optional[Meta] = None
 
 # Product Schemas
 class ProductBase(BaseModel):
@@ -23,6 +37,13 @@ class Product(ProductBase):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+class ProductSummary(BaseModel):
+    id: int
+    name: str
+    price: float
+    category: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
 # User Schemas
 class UserBase(BaseModel):
     username: str
@@ -34,16 +55,13 @@ class UserCreate(UserBase):
 class AdminCreate(UserCreate):
     admin_secret: str
 
-
 class User(UserBase):
     id: int
-    created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
 class UserSummary(BaseModel):
     id: int
     username: str
-    email: EmailStr
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -55,10 +73,10 @@ class CartItemBase(BaseModel):
 class CartItemCreate(CartItemBase):
     pass
 
-class CartItem(CartItemBase):
+class CartItem(BaseModel):
     id: int
-    user_id: int
-    product: Product
+    quantity: int
+    product: ProductSummary
     model_config = ConfigDict(from_attributes=True)
 
 class Cart(BaseModel):
@@ -68,15 +86,13 @@ class Cart(BaseModel):
 # Order Schemas
 class OrderItemResponse(BaseModel):
     id: int
-    product_id: int
     quantity: int
     price: float
-    product: Product
+    product: ProductSummary
     model_config = ConfigDict(from_attributes=True)
 
 class OrderResponse(BaseModel):
     id: int
-    user_id: int
     user: UserSummary
     total_amount: float
     status: str
