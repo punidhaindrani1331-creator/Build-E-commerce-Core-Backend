@@ -9,7 +9,7 @@ from database import get_db
 from auth import get_current_admin
 from redis_client import redis_client
 import redis
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 router = APIRouter(
     prefix="/admin",
@@ -174,7 +174,7 @@ def admin_view_all_orders(
     """
     orders = db.query(models.Order).options(
         joinedload(models.Order.user),
-        joinedload(models.Order.items).joinedload(models.OrderItem.product)
+        selectinload(models.Order.items).joinedload(models.OrderItem.product)
     ).all()
     return {
         "success": True,

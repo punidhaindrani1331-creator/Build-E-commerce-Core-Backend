@@ -99,3 +99,14 @@ class OrderResponse(BaseModel):
     created_at: datetime
     items: List[OrderItemResponse]
     model_config = ConfigDict(from_attributes=True)
+
+# Report Schemas
+class TopProductReport(BaseModel):
+    product_id: int
+    product_name: str
+    total_quantity: int
+    total_revenue: float
+
+class SlowApiReport(BaseModel):
+    endpoint: str
+    response_time: float

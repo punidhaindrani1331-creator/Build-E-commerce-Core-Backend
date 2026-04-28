@@ -9,7 +9,7 @@ def validate_cart_not_empty(cart_items: list):
 def validate_stock_sufficient(product: models.Product, requested_quantity: int):
     if product.stock < requested_quantity:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, 
+            status_code=status.HTTP_400_BAD_REQUEST, 
             detail=f"Not enough stock for product '{product.name}'. Available: {product.stock}"
         )
 

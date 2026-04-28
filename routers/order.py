@@ -7,7 +7,7 @@ import models, schemas
 from services import order_services
 from database import get_db
 from auth import get_current_user_id
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 router = APIRouter(
     prefix="/orders",
@@ -50,7 +50,7 @@ def place_order(
     order_items_to_create = []
     
     for item in cart_items:
-        # 409 ERROR: Out of stock
+        # 400 ERROR: Out of stock
         product = item.product
         order_services.validate_stock_sufficient(product, item.quantity)
         
@@ -124,7 +124,7 @@ def get_my_orders(
     """
     orders = db.query(models.Order).options(
         joinedload(models.Order.user),
-        joinedload(models.Order.items).joinedload(models.OrderItem.product)
+        selectinload(models.Order.items).joinedload(models.OrderItem.product)
     ).filter(models.Order.user_id == user_id).all()
     return {
         "success": True,

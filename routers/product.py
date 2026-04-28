@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -29,19 +29,20 @@ def read_products(
     limit: int = 10,
     sort_by: Optional[str] = None,
     order: str = "asc",
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    request: Request = None
 ):
     """
     Retrieve a list of products with optional search, filtering, sorting, and pagination. Accessible to all.
     Pagination: /products?page=1&limit=10
     Sorting: /products?sort_by=price&order=desc
     """
-    # Enforce max limit
-    if limit > 50:
-        limit = 50
-    if page < 1:
-        page = 1
-    offset = (page - 1) * limit
+    # Rate Limiting Logic moved to service
+    if request:
+        product_services.validate_rate_limit(request.client.host, "products")
+
+    # Pagination validation moved to service
+    page, limit, offset = product_services.validate_pagination(page, limit)
 
     # Only cache raw list without filters/sorting to keep it simple, matching "products:list"
     is_simple_list = not search and not category and min_price is None and max_price is None and page == 1 and limit == 10 and not sort_by

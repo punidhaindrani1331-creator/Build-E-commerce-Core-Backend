@@ -2,7 +2,42 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 import models
 import time
+import redis
+from redis_client import redis_client
 from typing import Optional, List, Tuple
+
+def validate_rate_limit(client_ip: str, endpoint: str, limit: int = 10, window: int = 60):
+    """
+    Validates if a client has exceeded the rate limit for a specific endpoint.
+    Default: 10 requests per 60 seconds.
+    """
+    rate_limit_key = f"rate_limit:{client_ip}:{endpoint}"
+    
+    try:
+        request_count = redis_client.incr(rate_limit_key)
+        if request_count == 1:
+            redis_client.expire(rate_limit_key, window)
+        
+        if request_count > limit:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Too many requests. Limit is {limit} per {window} seconds."
+            )
+    except redis.exceptions.RedisError as e:
+        # Log error and allow request (fail-open)
+        print(f"Redis Rate Limit Error: {e}")
+
+def validate_pagination(page: int, limit: int) -> Tuple[int, int, int]:
+    """
+    Validates and clamps pagination parameters.
+    Returns (clamped_page, clamped_limit, offset)
+    """
+    if limit > 50:
+        limit = 50
+    if page < 1:
+        page = 1
+    offset = (page - 1) * limit
+    return page, limit, offset
 
 def validate_product_exists(db: Session, product_id: int):
     start_time = time.time()
